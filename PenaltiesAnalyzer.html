@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SLU Penalties Analyzer | J&T</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <link rel="stylesheet" href="pen.css">
+</head>
+<body>
+  <div class="header">
+    <div class="header-inner">
+      <div class="header-left">
+        <img src="Packing.gif" alt="J&T" class="logo-gif"
+             onerror="this.src='Zorro.gif'; this.onerror=null;">
+        <div>
+          <h1>Penalties Analyzer</h1>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;">
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- Rate Search Bar (always visible) -->
+    <div class="card search-card">
+      <div class="search-bar-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="rateSearchInput" class="search-input"
+               placeholder="Search rate by route or supplier / trucker (e.g. 490-520 or Yunyi)..."
+               autocomplete="off">
+        <button type="button" class="btn btn-primary btn-search" id="btnRateSearch">Search</button>
+        <button type="button" class="btn btn-secondary btn-clear-search hidden" id="btnClearSearch">Clear</button>
+      </div>
+      <div id="rateSearchResults" class="rate-search-results hidden"></div>
+    </div>
+
+    <!-- Upload for bulk Excel -->
+    <div class="upload-box" id="dropZone">
+      <img src="upload-file.gif" alt="Upload" class="upload-gif"
+           onerror="this.outerHTML='<div style=&quot;font-size:2.5rem;margin-bottom:6px;&quot;>📂</div>';">
+      <p><strong>Click to upload</strong> or drag &amp; drop Excel for bulk penalties</p>
+      <!--<p>Columns: Route, Actual Travel Time, Plan Travel Time, Vehiclerier Abbreviation / Trucker (optional: Rate, ID, Date, Backload)</p> -->
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+    </div>
+
+    <div id="loading" class="loading hidden">
+      <div style="font-size:2rem;margin-bottom:8px;">⏳</div>
+      <div>Calculating penalties, please wait...</div>
+    </div>
+
+    <div class="pen-main-tabs">
+      <button type="button" class="pen-main-tab active" data-main="manual">✏️ Manual Calculator</button>
+      <button type="button" class="pen-main-tab" data-main="batch">📋 Bulk Results</button>
+      <button type="button" class="pen-main-tab" data-main="rates">💰 Rate Reference</button>
+      <button type="button" class="pen-main-tab" data-main="rules">📜 Penalty Rules</button>
+    </div>
+
+    <!-- MANUAL -->
+    <div id="penMainManual" class="pen-main-panel">
+      <!-- Mode switch -->
+      <div class="mode-tabs">
+        <button type="button" class="mode-tab active" data-mode="single">Single Entry</button>
+        <button type="button" class="mode-tab" data-mode="multi">Paste Multiple</button>
+      </div>
+
+      <!-- SINGLE -->
+      <div id="manualSingle" class="mode-panel">
+        <div class="card">
+          <h2><span class="icon">✏️</span> Single Trip Entry</h2>
+        <!--  <p class="section-note">Order: Route → Actual TT → Plan TT → Trucker. Rate is looked up from SLU 3PL VisMin / Local tables (trucker names match loosely).</p>-->
+          <form id="manualForm" autocomplete="off">
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="inputRoute">Route *</label>
+                <input type="text" id="inputRoute" list="routeList" placeholder="e.g. 490-520 or 490-520-521 or 520-490" required>
+                <datalist id="routeList"></datalist>
+              </div>
+              <div class="form-group">
+                <label for="inputActualTT">Actual Travel Time (ATT) *</label>
+                <input type="text" id="inputActualTT" placeholder="e.g. 16:15 or 16.25" required>
+              </div>
+              <div class="form-group">
+                <label for="inputPlanTT">Plan Travel Time (PTT) *</label>
+                <input type="text" id="inputPlanTT" placeholder="e.g. 14 or 14:30 or 14.5" required>
+              </div>
+              <div class="form-group">
+                <label for="inputSupplier">Trucker / Vehiclerier Abbr.</label>
+                <input type="text" id="inputSupplier" list="supplierList" placeholder="e.g. YUNYI TRANSPO or Yunyi">
+                <datalist id="supplierList"></datalist>
+              </div>
+              <div class="form-group">
+                <label for="inputRateOverride">Rate Override (optional)</label>
+                <input type="number" id="inputRateOverride" step="0.01" min="0" placeholder="Leave blank to auto-lookup">
+              </div>
+              <div class="form-group checkbox">
+                <input type="checkbox" id="inputForceBack">
+                <label for="inputForceBack">Force Backload rate</label>
+              </div>
+            </div>
+            <div id="ratePreview" class="rate-preview">Enter route to preview matched rate</div>
+            <div class="btn-row">
+              <button type="submit" class="btn btn-primary" id="btnManualCalc">Calculate Penalty</button>
+              <button type="button" class="btn btn-secondary" id="btnManualClear">Clear</button>
+            </div>
+          </form>
+          <div id="manualResult" class="hidden"></div>
+        </div>
+      </div>
+
+      <!-- MULTI PASTE -->
+      <div id="manualMulti" class="mode-panel hidden">
+        <div class="card">
+          <h2><span class="icon">📋</span> Paste Multiple Entries</h2>
+         <!-- <p class="section-note">
+            Paste one trip per line. Order: <strong>Route | Actual TT | Plan TT | Trucker</strong><br>
+            Separators: <code>|</code>, tab, or comma. Optional 5th column = Rate override.<br>
+            Trucker names match loosely (e.g. <code>YUNYI TRANSPO</code> = <code>Yunyi Transportation, INC.</code>).
+          </p>-->
+          <textarea id="multiPasteArea" class="multi-paste" rows="10"
+            placeholder="490-520 | 15.5 | 14 | YUNYI TRANSPO
+490-521 | 20:30 | 18:00 | R PEDRAJA
+490-530 | 25 | 22 | GREAT WILL
+520-490 | 13.5 | 12 | yunyi"></textarea>
+          <div class="btn-row" style="margin-top:12px;">
+            <button type="button" class="btn btn-primary" id="btnMultiCalc">Calculate All</button>
+            <button type="button" class="btn btn-secondary" id="btnMultiClear">Clear</button>
+          </div>
+        </div>
+
+        <div id="multiSummary" class="card hidden">
+          <h2><span class="icon">📊</span> Results Summary</h2>
+          <div class="metrics" id="multiMetrics"></div>
+          <div class="btn-row" style="margin-bottom:8px;">
+            <button type="button" class="btn btn-export" id="btnMultiExport">⬇ Export Excel</button>
+          </div>
+        </div>
+
+        <div id="multiListCard" class="card hidden">
+          <h2><span class="icon">📝</span> Entries <span class="hint">(click a row for full details)</span></h2>
+          <div id="multiList" class="multi-list"></div>
+        </div>
+
+        <!-- Detail panel for clicked entry -->
+        <div id="multiDetail" class="card multi-detail hidden">
+          <div class="detail-header">
+            <h2><span class="icon">🔎</span> Entry Detail</h2>
+            <button type="button" class="btn btn-secondary btn-sm" id="btnCloseDetail">Close</button>
+          </div>
+          <div id="multiDetailBody"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BATCH -->
+    <div id="penMainBatch" class="pen-main-panel hidden">
+      <div class="card">
+        <h2><span class="icon">📊</span> Bulk Summary</h2>
+        <div class="file-info" id="fileInfo"></div>
+        <div class="metrics" id="batchMetrics"></div>
+        <div class="btn-row" style="margin-bottom:12px;">
+          <button type="button" class="btn btn-export" id="btnExport">⬇ Export Excel</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2><span class="icon">🤝</span> By Supplier / Trucker</h2>
+        <div class="table-wrap">
+          <table id="supSummaryTable">
+            <thead>
+              <tr>
+                <th>Supplier</th>
+                <th class="num">Trips</th>
+                <th class="num">Late</th>
+                <th class="num">On-Time</th>
+                <th class="num">Total Penalty</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h2><span class="icon">📋</span> Trip Detail</h2>
+        <div class="table-wrap" style="max-height:480px;overflow-y:auto;">
+          <table id="detailTable">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Date</th>
+                <th>Route</th>
+                <th>Supplier</th>
+                <th class="num">PTT</th>
+                <th class="num">ATT</th>
+                <th class="num">DT</th>
+                <th class="num">Rate</th>
+                <th class="num">Penalty</th>
+                <th>Rule</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- RATES -->
+    <div id="penMainRates" class="pen-main-panel hidden">
+      <div class="card">
+        <h2><span class="icon">🏝️</span> VisMin Rates</h2>
+   <!--   <p class="section-note">Multi-drop routes (e.g. 490-520-521) use first–last leg. Reverse routes (e.g. 520-490) use Backload rate.</p> -->
+        <div class="table-wrap" style="max-height:420px;overflow-y:auto;">
+          <table id="visminRateTable">
+            <thead>
+              <tr>
+                <th>Region</th>
+                <th>City</th>
+                <th>Route</th>
+                <th>Supplier</th>
+                <th class="num">Effective Price</th>
+                <th class="num">Backload Rate</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h2><span class="icon">🏠</span> Local Trips Rates</h2>
+        <div class="table-wrap" style="max-height:420px;overflow-y:auto;">
+          <table id="localRateTable">
+            <thead>
+              <tr>
+                <th>Region</th>
+                <th>Departure DC</th>
+                <th>Delivery Branch</th>
+                <th>Branch Code</th>
+                <th class="num">Rate</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- RULES -->
+    <div id="penMainRules" class="pen-main-panel hidden">
+      <div class="card">
+        <h2><span class="icon">📜</span> Penalty Rules</h2>
+        <div class="rules-list">
+          <div class="rule-block">
+            <h4>When Plan Travel Time (PTT) &gt; 12 hours</h4>
+            <ul>
+              <li>Delayed Time (DT) from <strong>1 minute to 2 hours</strong> → fixed penalty <strong>₱3,000</strong></li>
+              <li>Delayed Time (DT) <strong>&gt; 2 hours</strong> → fixed penalty <strong>₱5,000</strong></li>
+            </ul>
+          </div>
+          <div class="rule-block">
+            <h4>When Plan Travel Time (PTT) is 0 to 12 hours</h4>
+            <ul>
+              <li>DT from <strong>1 minute to 30 minutes</strong> → <strong>2%</strong> of the trip rate</li>
+              <li>DT <strong>&gt; 30 minutes</strong> → <strong>5%</strong> of the trip rate</li>
+            </ul>
+          </div>
+          <div class="rule-block">
+            <h4>Rate lookup basis</h4>
+            <ul>
+              <li>Primary: <strong>SLU 3PL VisMin</strong> table matched by <em>Route + Supplier</em></li>
+              <li>Fallback: <strong>SLU 3PL Local Trips</strong> matched by DC / Branch codes</li>
+              <li>Multi-drop example <code>490-520-521</code> → uses first &amp; last leg → <code>490-521</code></li>
+              <li>Reverse / return example <code>520-490</code> → uses <strong>Backload</strong> rate</li>
+              <li>You may override the rate manually on any calculation</li>
+            </ul>
+          </div>
+        </div>
+        <div class="note-box">
+       <!--  <strong>DT</strong> = Actual Travel Time − Plan Travel Time. If DT ≤ 0 (on-time or early), penalty is ₱0.
+          Time inputs accept decimal hours (14.5), HH:MM (14:30), or mixed text.--> 
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="penRates.js"></script>
+  <script src="penUtils.js"></script>
+  <script src="penCalculator.js"></script>
+  <script src="penFileProcessor.js"></script>
+  <script src="penUIManager.js"></script>
+  <script src="penApp.js"></script>
+</body>
+</html>
