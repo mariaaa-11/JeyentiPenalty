@@ -26,13 +26,15 @@ const PenCalculator = (() => {
       rateInfo = PenRates.findRate(input.route, input.supplier, input.forceBackload);
     }
 
-    const pen = PenUtils.computePenalty(planH, dtH, rateInfo.rate);
+    const status = input.status || '';
+    const pen = PenUtils.computePenalty(planH, dtH, rateInfo.rate, status);
 
     return {
       id: input.id || '',
       date: input.date || '',
       route: input.route || '',
       supplier: input.supplier || '',
+      status: status,
       planTT: planH,
       actualTT: actualH,
       dt: dtH,
