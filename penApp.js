@@ -95,6 +95,29 @@
       }
   
       document.getElementById('btnExport')?.addEventListener('click', () => PenUIManager.exportResults(false));
+
+      // Date filter
+      document.querySelectorAll('.df-mode').forEach(btn => {
+        btn.addEventListener('click', () => {
+          PenUIManager.setDfMode(btn.getAttribute('data-df'));
+        });
+      });
+      document.getElementById('btnApplyDateFilter')?.addEventListener('click', () => PenUIManager.applyDateFilter());
+      document.getElementById('btnClearDateFilter')?.addEventListener('click', () => PenUIManager.clearDateFilter());
+
+      // Rules help popover (?)
+      document.getElementById('btnRulesHelp')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        PenUIManager.toggleRulesPopover();
+      });
+      document.getElementById('btnCloseRules')?.addEventListener('click', () => PenUIManager.toggleRulesPopover(false));
+      document.addEventListener('click', (e) => {
+        const pop = document.getElementById('rulesPopover');
+        const btn = document.getElementById('btnRulesHelp');
+        if (!pop || pop.classList.contains('hidden')) return;
+        if (pop.contains(e.target) || btn?.contains(e.target)) return;
+        PenUIManager.toggleRulesPopover(false);
+      });
   
       // datalists
       const dl = document.getElementById('supplierList');
