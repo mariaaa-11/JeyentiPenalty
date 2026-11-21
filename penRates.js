@@ -12,51 +12,92 @@ const PenRates = (() => {
 
   function parseRouteParts(route) {
     const n = normalizeRoute(route);
-    const parts = n.split('-').filter(Boolean);
-    return parts;
+    return n.split('-').filter(Boolean);
   }
 
-  /** Resolve lookup key and whether to use backload.
-   * Multi-drop e.g. 490-520-521 → first-last = 490-521
-   * Reverse e.g. 520-490 → backload flag
+  /**
+   * Resolve lookup key and whether to use backload — Route label (col E) basis.
+   *
+   * key = first leg → second-to-last leg of the route label.
+   * Route labels usually end with a time code (HHMM), e.g.:
+   *   490-380-1300        → first 490, second-to-last 380 → 490-380
+   *   490-860-850-1300    → first 490, second-to-last 850 → 490-850
+   *   820-490-1200        → second-to-last 490 → BACKLOAD of 490-820
+   *   880-530-520-490-0600 → second-to-last 490 → BACKLOAD of 490-880
+   * Plain 2-leg (no time): 490-520 → 490-520; 520-490 → BACKLOAD of 490-520
    */
   function resolveRouteKey(routeStr) {
     const parts = parseRouteParts(routeStr);
     if (parts.length === 0) return { key: '', isBackload: false, parts };
+    if (parts.length === 1) return { key: parts[0], isBackload: false, parts };
+
+    const first = parts[0];
+    // 2 segments: destination is the last leg
+    // 3+ segments: destination for rate is the second-to-last leg (last is often time HHMM)
+    const secondToLast = parts.length === 2 ? parts[1] : parts[parts.length - 2];
+
     let isBackload = false;
     let key;
-    if (parts.length >= 3) {
-      // multi-drop → first & last leg
-      key = parts[0] + '-' + parts[parts.length - 1];
-      const a = parseInt(parts[0], 10), b = parseInt(parts[parts.length - 1], 10);
-      if (!isNaN(a) && !isNaN(b) && a > b) {
-        isBackload = true;
-        key = parts[parts.length - 1] + '-' + parts[0];
-      }
-    } else if (parts.length === 2) {
-      key = parts[0] + '-' + parts[1];
-      // reverse (e.g. 520-490) → canonical 490-520 + backload flag
-      const a = parseInt(parts[0], 10), b = parseInt(parts[1], 10);
-      if (!isNaN(a) && !isNaN(b) && a > b) {
-        isBackload = true;
-        key = parts[1] + '-' + parts[0];
-      }
+    if (secondToLast === '490' && first !== '490') {
+      isBackload = true;
+      key = '490-' + first;
     } else {
-      key = parts[0];
+      key = first + '-' + secondToLast;
     }
     return { key, isBackload, parts };
   }
 
-  /** Normalize supplier for matching: strip noise words, keep core name tokens */
+  /** Explicit ops-file abbreviations → rate-table name fragments */
+  const SUPPLIER_ALIASES = {
+    'CJSMARTFREIGHT': 'CJ SMART FREIGHT',
+    'CJSMART': 'CJ SMART FREIGHT',
+    'CJSF': 'CJ SMART FREIGHT',
+    'FASTEASY': '888FASTEASY',
+    '888FASTEASY': '888FASTEASY',
+    'PULC': 'PRIME UPLAND',
+    'PRIMEUPLAND': 'PRIME UPLAND',
+    'RLYN': 'R-LYN',
+    'RLYNTRUCKING': 'R-LYN',
+    'RDTRUCKING': 'R.D THADDEUS',
+    'RDTHADEUS': 'R.D THADDEUS',
+    'RDTHADDEUS': 'R.D THADDEUS',
+    'GREATWILL': 'GREAT WILL',
+    'PEDRAJA': 'R PEDRAJA',
+    'RPEDRAJA': 'R PEDRAJA',
+    'JAMILINES': 'JAMILINES',
+    'CCJ': 'CCJ LOGISTICS',
+    'CCJLOGISTICS': 'CCJ LOGISTICS',
+    'YUNYI': 'YUNYI',
+    'YUNYITRANSPO': 'YUNYI',
+    'PESIG': 'PESIG',
+    'GPC': 'GPC',
+    'HILLSTER': 'HILLSTER',
+    'ZKNIGHTS': 'Z KNIGHTS',
+    'ZKNIGHT': 'Z KNIGHTS',
+    'PRECISION': 'PRECISION SUPPLY',
+    'PRECISSION': 'PRECISION SUPPLY',
+    'ALFONSO': 'ALFONSO ALEJANDRIA',
+    'RROBLES': 'R. ROBLES',
+    'ROBLES': 'R. ROBLES'
+  };
+
   function normalizeSupplier(s) {
     if (!s) return '';
-    let t = String(s).toUpperCase()
+    return String(s).toUpperCase()
       .replace(/[^A-Z0-9\s]/g, ' ')
-      .replace(/\b(TRANSPORTATION|TRANSPO|TRANSPORT|TRUCKING|TRUCK|LOGISTICS|LOGISTIC|SERVICES|SERVICE|ENTERPRISES|ENTERPRISE|INC|INCORPORATED|CORP|CORPORATION|CO|COMPANY|OPC|LTD|LIMITED|FREIGHT|SUPPLY|CHAIN|VENTURES|SMART|GREAT|WILL)\b/g, ' ')
+      .replace(/\b(TRANSPORTATION|TRANSPO|TRANSPORT|TRUCKING|TRUCK|LOGISTICS|LOGISTIC|SERVICES|SERVICE|ENTERPRISES|ENTERPRISE|INC|INCORPORATED|CORP|CORPORATION|CO|COMPANY|OPC|LTD|LIMITED|VENTURES)\b/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-    // also compact form without spaces
-    return t;
+  }
+
+  function expandAlias(s) {
+    if (!s) return '';
+    const key = String(s).toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (SUPPLIER_ALIASES[key]) return SUPPLIER_ALIASES[key];
+    for (const [k, v] of Object.entries(SUPPLIER_ALIASES)) {
+      if (key.includes(k) || k.includes(key)) return v;
+    }
+    return s;
   }
 
   function fuzzySupplier(a, b) {
@@ -65,16 +106,18 @@ const PenRates = (() => {
     const rawB = b.toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (rawA === rawB || rawA.includes(rawB) || rawB.includes(rawA)) return true;
 
-    // token / core-name match (YUNYI TRANSPO ↔ Yunyi Transportation, INC.)
-    const na = normalizeSupplier(a);
-    const nb = normalizeSupplier(b);
+    const expA = expandAlias(a).toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const expB = expandAlias(b).toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (expA === expB || expA.includes(expB) || expB.includes(expA)) return true;
+
+    const na = normalizeSupplier(expandAlias(a));
+    const nb = normalizeSupplier(expandAlias(b));
     if (!na || !nb) return false;
     if (na === nb) return true;
     const compactA = na.replace(/\s/g, '');
     const compactB = nb.replace(/\s/g, '');
     if (compactA === compactB || compactA.includes(compactB) || compactB.includes(compactA)) return true;
 
-    // shared significant token (length >= 3)
     const tokensA = na.split(/\s+/).filter(t => t.length >= 3);
     const tokensB = nb.split(/\s+/).filter(t => t.length >= 3);
     if (tokensA.some(t => tokensB.includes(t))) return true;
@@ -91,10 +134,8 @@ const PenRates = (() => {
     const useBack = forceBackload === true || (forceBackload !== false && autoBack);
     if (!key) return { rate: null, source: null, note: 'No route' };
 
-    // 1. VisMin exact route + supplier
     let candidates = VISMIN.filter(v => normalizeRoute(v.route) === key);
     if (candidates.length === 0) {
-      // try original multi without collapsing
       const full = normalizeRoute(routeStr);
       candidates = VISMIN.filter(v => normalizeRoute(v.route) === full);
     }
@@ -103,7 +144,6 @@ const PenRates = (() => {
       if (bySup.length) candidates = bySup;
     }
     if (candidates.length) {
-      // prefer exact supplier match, else first
       const pick = candidates.find(v => fuzzySupplier(v.supplier, supplier)) || candidates[0];
       let rate = useBack ? (pick.backloadRate ?? pick.effectivePrice) : pick.effectivePrice;
       if (rate == null) rate = pick.effectivePrice;
@@ -121,7 +161,6 @@ const PenRates = (() => {
       };
     }
 
-    // 2. Local trips: try match DC code + Branch code from parts
     if (parts.length >= 2) {
       const dc = parts[0], br = parts[1];
       let loc = LOCAL.filter(l => String(l.dcCode) === dc && String(l.branchCode).toUpperCase() === br.toUpperCase());
