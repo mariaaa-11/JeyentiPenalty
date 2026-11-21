@@ -62,8 +62,31 @@ const PenUtils = (() => {
     return (n * 100).toFixed(1) + '%';
   }
 
-  /** Core penalty rules */
-  function computePenalty(pttHours, dtHours, rate) {
+  /**
+   * Core penalty rules with STATUS override:
+   *  - Disputed → ₱0
+   *  - Broken   → 20% of rate
+   *  - Penalty  → normal travel-time rules
+   *  - (blank / other) → normal travel-time rules
+   */
+  function computePenalty(pttHours, dtHours, rate, status) {
+    const st = String(status || '').trim().toLowerCase();
+
+    // STATUS: Disputed → no penalty
+    if (st === 'disputed') {
+      return { penalty: 0, rule: 'STATUS: Disputed → no penalty', category: 'disputed' };
+    }
+
+    // STATUS: Broken → 20% of rate
+    if (st === 'broken') {
+      if (rate == null || rate <= 0) {
+        return { penalty: 0, rule: 'STATUS: Broken but no rate found for 20%', category: 'broken-no-rate' };
+      }
+      const pen = Math.round(rate * 0.20 * 100) / 100;
+      return { penalty: pen, rule: 'STATUS: Broken → 20% of rate', category: 'broken-20pct', rateUsed: rate };
+    }
+
+    // STATUS: Penalty (or blank) → travel-time rules
     if (pttHours == null || dtHours == null) {
       return { penalty: 0, rule: 'Missing PTT or DT', category: null };
     }
@@ -75,18 +98,16 @@ const PenUtils = (() => {
     const dt = dtHours;
 
     if (ptt > 12) {
-      // Long haul fixed penalties
       if (dt <= 2) {
         return { penalty: 3000, rule: 'PTT > 12h & DT 1min–2h → ₱3,000', category: 'long-fixed-low' };
       }
       return { penalty: 5000, rule: 'PTT > 12h & DT > 2h → ₱5,000', category: 'long-fixed-high' };
     }
 
-    // Short / medium: % of rate
     if (rate == null || rate <= 0) {
       return { penalty: 0, rule: 'PTT ≤ 12h but no rate found for % calculation', category: 'no-rate' };
     }
-    if (dt <= 0.5) { // 30 min
+    if (dt <= 0.5) {
       const pen = rate * 0.02;
       return { penalty: Math.round(pen * 100) / 100, rule: 'PTT ≤ 12h & DT 1min–30min → 2% of rate', category: 'short-2pct', rateUsed: rate };
     }
