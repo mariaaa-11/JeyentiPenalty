@@ -17,7 +17,50 @@
           <h1>Penalties Analyzer</h1>
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:12px;">
+      <div class="header-right">
+        <button type="button" class="rules-help-btn" id="btnRulesHelp" title="Penalty Rules">?</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rules popover -->
+  <div id="rulesPopover" class="rules-popover hidden">
+    <div class="rules-popover-inner">
+      <div class="rules-popover-header">
+        <strong>Penalty Rules</strong>
+        <button type="button" class="rules-close" id="btnCloseRules">×</button>
+      </div>
+      <div class="rules-list">
+        <div class="rule-block">
+          <h4>PTT &gt; 12 hours</h4>
+          <ul>
+            <li>DT 1 min – 2 hours → <strong>₱3,000</strong></li>
+            <li>DT &gt; 2 hours → <strong>₱5,000</strong></li>
+          </ul>
+        </div>
+        <div class="rule-block">
+          <h4>PTT 0 – 12 hours</h4>
+          <ul>
+            <li>DT 1 min – 30 min → <strong>2%</strong> of rate</li>
+            <li>DT &gt; 30 min → <strong>5%</strong> of rate</li>
+          </ul>
+        </div>
+        <div class="rule-block">
+          <h4>STATUS</h4>
+          <ul>
+            <li><strong>Disputed</strong> → no penalty (₱0)</li>
+            <li><strong>Broken</strong> → <strong>20%</strong> of rate</li>
+            <li><strong>Penalty</strong> → travel-time rules above</li>
+          </ul>
+        </div>
+        <div class="rule-block">
+          <h4>Rate basis</h4>
+          <ul>
+            <li>Route label: <em>first leg → second-to-last leg</em></li>
+            <li>If second-to-last is <code>490</code> → <strong>backload</strong></li>
+            <li>Matched by route + trucker (fuzzy)</li>
+          </ul>
+        </div>
       </div>
     </div>
   </div>
@@ -54,7 +97,6 @@
       <button type="button" class="pen-main-tab active" data-main="manual">✏️ Manual Calculator</button>
       <button type="button" class="pen-main-tab" data-main="batch">📋 Bulk Results</button>
       <button type="button" class="pen-main-tab" data-main="rates">💰 Rate Reference</button>
-      <button type="button" class="pen-main-tab" data-main="rules">📜 Penalty Rules</button>
     </div>
 
     <!-- MANUAL -->
@@ -156,6 +198,45 @@
     <!-- BATCH -->
     <div id="penMainBatch" class="pen-main-panel hidden">
       <div class="card">
+        <h2><span class="icon">📅</span> Date Filter</h2>
+        <div class="date-filter-bar">
+          <div class="df-modes">
+            <button type="button" class="df-mode active" data-df="all">All</button>
+            <button type="button" class="df-mode" data-df="day">Day</button>
+            <button type="button" class="df-mode" data-df="week">Week</button>
+            <button type="button" class="df-mode" data-df="month">Month</button>
+            <button type="button" class="df-mode" data-df="range">Range</button>
+            <button type="button" class="df-mode" data-df="pick">Pick dates</button>
+          </div>
+          <div class="df-controls">
+            <div class="df-panel" id="dfPanelDay">
+              <label>Day</label>
+              <select id="dfDaySelect"></select>
+            </div>
+            <div class="df-panel hidden" id="dfPanelWeek">
+              <label>Week</label>
+              <select id="dfWeekSelect"></select>
+            </div>
+            <div class="df-panel hidden" id="dfPanelMonth">
+              <label>Month</label>
+              <select id="dfMonthSelect"></select>
+            </div>
+            <div class="df-panel hidden" id="dfPanelRange">
+              <label>From</label>
+              <input type="date" id="dfRangeFrom">
+              <label>To</label>
+              <input type="date" id="dfRangeTo">
+            </div>
+            <div class="df-panel hidden" id="dfPanelPick">
+              <div id="dfPickList" class="df-pick-list"></div>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" id="btnApplyDateFilter">Apply</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btnClearDateFilter">Reset</button>
+          </div>
+          <div class="df-status" id="dfStatus">Showing all dates</div>
+        </div>
+      </div>
+      <div class="card">
         <h2><span class="icon">📊</span> Bulk Summary</h2>
         <div class="file-info" id="fileInfo"></div>
         <div class="metrics" id="batchMetrics"></div>
@@ -190,6 +271,7 @@
                 <th>Date</th>
                 <th>Route</th>
                 <th>Supplier</th>
+                <th>Status</th>
                 <th class="num">PTT</th>
                 <th class="num">ATT</th>
                 <th class="num">DT</th>
@@ -244,43 +326,7 @@
       </div>
     </div>
 
-    <!-- RULES -->
-    <div id="penMainRules" class="pen-main-panel hidden">
-      <div class="card">
-        <h2><span class="icon">📜</span> Penalty Rules</h2>
-        <div class="rules-list">
-          <div class="rule-block">
-            <h4>When Plan Travel Time (PTT) &gt; 12 hours</h4>
-            <ul>
-              <li>Delayed Time (DT) from <strong>1 minute to 2 hours</strong> → fixed penalty <strong>₱3,000</strong></li>
-              <li>Delayed Time (DT) <strong>&gt; 2 hours</strong> → fixed penalty <strong>₱5,000</strong></li>
-            </ul>
-          </div>
-          <div class="rule-block">
-            <h4>When Plan Travel Time (PTT) is 0 to 12 hours</h4>
-            <ul>
-              <li>DT from <strong>1 minute to 30 minutes</strong> → <strong>2%</strong> of the trip rate</li>
-              <li>DT <strong>&gt; 30 minutes</strong> → <strong>5%</strong> of the trip rate</li>
-            </ul>
-          </div>
-          <div class="rule-block">
-            <h4>Rate lookup basis</h4>
-            <ul>
-              <li>Primary: <strong>SLU 3PL VisMin</strong> table matched by <em>Route + Supplier</em></li>
-              <li>Fallback: <strong>SLU 3PL Local Trips</strong> matched by DC / Branch codes</li>
-              <li>Multi-drop example <code>490-520-521</code> → uses first &amp; last leg → <code>490-521</code></li>
-              <li>Reverse / return example <code>520-490</code> → uses <strong>Backload</strong> rate</li>
-              <li>You may override the rate manually on any calculation</li>
-            </ul>
-          </div>
-        </div>
-        <div class="note-box">
-       <!--  <strong>DT</strong> = Actual Travel Time − Plan Travel Time. If DT ≤ 0 (on-time or early), penalty is ₱0.
-          Time inputs accept decimal hours (14.5), HH:MM (14:30), or mixed text.--> 
-        </div>
-      </div>
     </div>
-  </div>
 
   <script src="penRates.js"></script>
   <script src="penUtils.js"></script>
