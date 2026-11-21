@@ -200,8 +200,184 @@ const PenUIManager = (() => {
     box.classList.remove('hidden');
   }
 
-  /* ---------- Batch (Excel upload) ---------- */
-  function renderBatch(results) {
+  /* ---------- Date helpers ---------- */
+  let allBatchResults = [];
+  let filteredBatchResults = [];
+  let currentDfMode = 'all';
+
+  function toDateKey(val) {
+    if (val == null || val === '') return '';
+    if (val instanceof Date && !isNaN(val)) {
+      return val.getFullYear() + '-' + String(val.getMonth() + 1).padStart(2, '0') + '-' + String(val.getDate()).padStart(2, '0');
+    }
+    const s = String(val).trim();
+    // already YYYY-MM-DD
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return m[1] + '-' + m[2] + '-' + m[3];
+    // Excel serial
+    const n = parseFloat(s);
+    if (!isNaN(n) && n > 30000 && n < 60000) {
+      const d = new Date(Math.round((n - 25569) * 86400 * 1000));
+      if (!isNaN(d)) return toDateKey(d);
+    }
+    const d2 = new Date(s);
+    if (!isNaN(d2)) return toDateKey(d2);
+    return '';
+  }
+
+  function weekKey(dateKey) {
+    if (!dateKey) return '';
+    const [y, m, d] = dateKey.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    // ISO-ish week start Monday
+    const day = (dt.getDay() + 6) % 7;
+    const monday = new Date(dt);
+    monday.setDate(dt.getDate() - day);
+    return toDateKey(monday);
+  }
+
+  function monthKey(dateKey) {
+    return dateKey ? dateKey.slice(0, 7) : '';
+  }
+
+  function collectDateMeta(results) {
+    const days = new Set();
+    results.forEach(r => {
+      const k = toDateKey(r.date);
+      if (k) days.add(k);
+    });
+    const sorted = [...days].sort();
+    const weeks = [...new Set(sorted.map(weekKey))].sort();
+    const months = [...new Set(sorted.map(monthKey))].sort();
+    return { days: sorted, weeks, months };
+  }
+
+  function populateDateFilters(results) {
+    const meta = collectDateMeta(results);
+    const daySel = document.getElementById('dfDaySelect');
+    const weekSel = document.getElementById('dfWeekSelect');
+    const monthSel = document.getElementById('dfMonthSelect');
+    const pickList = document.getElementById('dfPickList');
+
+    if (daySel) {
+      daySel.innerHTML = meta.days.map(d => `<option value="${d}">${d}</option>`).join('') || '<option value="">—</option>';
+    }
+    if (weekSel) {
+      weekSel.innerHTML = meta.weeks.map(w => {
+        const end = new Date(w + 'T12:00:00');
+        end.setDate(end.getDate() + 6);
+        const endKey = toDateKey(end);
+        return `<option value="${w}">Week of ${w} → ${endKey}</option>`;
+      }).join('') || '<option value="">—</option>';
+    }
+    if (monthSel) {
+      monthSel.innerHTML = meta.months.map(m => `<option value="${m}">${m}</option>`).join('') || '<option value="">—</option>';
+    }
+    if (pickList) {
+      pickList.innerHTML = meta.days.map(d =>
+        `<label class="df-pick-item"><input type="checkbox" value="${d}"><span>${d}</span></label>`
+      ).join('') || '<span class="df-status">No dates</span>';
+      pickList.querySelectorAll('.df-pick-item').forEach(lab => {
+        lab.addEventListener('click', (e) => {
+          if (e.target.tagName === 'INPUT') return;
+          const cb = lab.querySelector('input');
+          cb.checked = !cb.checked;
+          lab.classList.toggle('selected', cb.checked);
+        });
+        lab.querySelector('input')?.addEventListener('change', () => {
+          lab.classList.toggle('selected', lab.querySelector('input').checked);
+        });
+      });
+    }
+    // range defaults
+    if (meta.days.length) {
+      const from = document.getElementById('dfRangeFrom');
+      const to = document.getElementById('dfRangeTo');
+      if (from) from.value = meta.days[0];
+      if (to) to.value = meta.days[meta.days.length - 1];
+    }
+  }
+
+  function setDfMode(mode) {
+    currentDfMode = mode || 'all';
+    document.querySelectorAll('.df-mode').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-df') === currentDfMode);
+    });
+    ['day', 'week', 'month', 'range', 'pick'].forEach(m => {
+      const panel = document.getElementById('dfPanel' + m.charAt(0).toUpperCase() + m.slice(1));
+      // ids: dfPanelDay, dfPanelWeek, dfPanelMonth, dfPanelRange, dfPanelPick
+    });
+    const map = {
+      all: null,
+      day: 'dfPanelDay',
+      week: 'dfPanelWeek',
+      month: 'dfPanelMonth',
+      range: 'dfPanelRange',
+      pick: 'dfPanelPick'
+    };
+    Object.values(map).forEach(id => {
+      if (!id) return;
+      document.getElementById(id)?.classList.add('hidden');
+    });
+    if (map[currentDfMode]) {
+      document.getElementById(map[currentDfMode])?.classList.remove('hidden');
+    }
+  }
+
+  function applyDateFilter() {
+    let filtered = allBatchResults.slice();
+    let status = 'Showing all dates';
+
+    if (currentDfMode === 'day') {
+      const day = document.getElementById('dfDaySelect')?.value;
+      filtered = filtered.filter(r => toDateKey(r.date) === day);
+      status = day ? `Day: ${day}` : status;
+    } else if (currentDfMode === 'week') {
+      const wk = document.getElementById('dfWeekSelect')?.value;
+      filtered = filtered.filter(r => weekKey(toDateKey(r.date)) === wk);
+      status = wk ? `Week of ${wk}` : status;
+    } else if (currentDfMode === 'month') {
+      const mo = document.getElementById('dfMonthSelect')?.value;
+      filtered = filtered.filter(r => monthKey(toDateKey(r.date)) === mo);
+      status = mo ? `Month: ${mo}` : status;
+    } else if (currentDfMode === 'range') {
+      const from = document.getElementById('dfRangeFrom')?.value || '';
+      const to = document.getElementById('dfRangeTo')?.value || '';
+      filtered = filtered.filter(r => {
+        const k = toDateKey(r.date);
+        if (!k) return false;
+        if (from && k < from) return false;
+        if (to && k > to) return false;
+        return true;
+      });
+      status = `Range: ${from || '…'} → ${to || '…'}`;
+    } else if (currentDfMode === 'pick') {
+      const picked = [...document.querySelectorAll('#dfPickList input:checked')].map(cb => cb.value);
+      if (picked.length) {
+        const set = new Set(picked);
+        filtered = filtered.filter(r => set.has(toDateKey(r.date)));
+        status = `Picked ${picked.length} date(s)`;
+      } else {
+        status = 'No dates picked — showing all';
+      }
+    }
+
+    filteredBatchResults = filtered;
+    const statusEl = document.getElementById('dfStatus');
+    if (statusEl) statusEl.textContent = `${status} · ${filtered.length} trip(s)`;
+    paintBatch(filtered);
+  }
+
+  function clearDateFilter() {
+    currentDfMode = 'all';
+    setDfMode('all');
+    filteredBatchResults = allBatchResults.slice();
+    const statusEl = document.getElementById('dfStatus');
+    if (statusEl) statusEl.textContent = `Showing all dates · ${allBatchResults.length} trip(s)`;
+    paintBatch(allBatchResults);
+  }
+
+  function paintBatch(results) {
     lastResults = results || [];
     const summary = PenCalculator.grandTotal(results);
     const bySup = PenCalculator.summaryBySupplier(results);
@@ -236,16 +412,20 @@ const PenUIManager = (() => {
     const detBody = document.querySelector('#detailTable tbody');
     if (detBody) {
       if (!results.length) {
-        detBody.innerHTML = '<tr><td colspan="10" class="empty">No rows</td></tr>';
+        detBody.innerHTML = '<tr><td colspan="11" class="empty">No rows</td></tr>';
       } else {
         detBody.innerHTML = results.map((r, i) => {
           const dtCls = r.dt > 0 ? 'late' : (r.dt < 0 ? 'early' : '');
           const penCls = r.penalty > 0 ? 'has-pen' : '';
+          const dateStr = toDateKey(r.date) || (r.date || '');
+          const st = String(r.status || '').toLowerCase();
+          const stCls = st === 'disputed' ? 'status-disputed' : (st === 'broken' ? 'status-broken' : (st === 'penalty' ? 'status-penalty' : ''));
           return `<tr class="${penCls}">
             <td>${PenUtils.escapeHtml(r.id || (i + 1))}</td>
-            <td>${PenUtils.escapeHtml(r.date || '')}</td>
+            <td>${PenUtils.escapeHtml(dateStr)}</td>
             <td>${PenUtils.escapeHtml(r.route)}</td>
             <td>${PenUtils.escapeHtml(r.supplier)}</td>
+            <td class="${stCls}">${PenUtils.escapeHtml(r.status || '—')}</td>
             <td class="num">${PenUtils.formatHours(r.planTT)}</td>
             <td class="num">${PenUtils.formatHours(r.actualTT)}</td>
             <td class="num ${dtCls}">${r.dt != null ? PenUtils.formatHours(r.dt) : '—'}</td>
@@ -256,7 +436,17 @@ const PenUIManager = (() => {
         }).join('');
       }
     }
+  }
 
+  /* ---------- Batch (Excel upload) ---------- */
+  function renderBatch(results) {
+    allBatchResults = results || [];
+    filteredBatchResults = allBatchResults.slice();
+    populateDateFilters(allBatchResults);
+    setDfMode('all');
+    const statusEl = document.getElementById('dfStatus');
+    if (statusEl) statusEl.textContent = `Showing all dates · ${allBatchResults.length} trip(s)`;
+    paintBatch(allBatchResults);
     showResults();
     showMainPanel('batch');
   }
@@ -266,10 +456,18 @@ const PenUIManager = (() => {
     document.querySelectorAll('.pen-main-tab').forEach(b => {
       b.classList.toggle('active', b.getAttribute('data-main') === id);
     });
-    const map = { manual: 'penMainManual', batch: 'penMainBatch', rates: 'penMainRates', rules: 'penMainRules' };
+    const map = { manual: 'penMainManual', batch: 'penMainBatch', rates: 'penMainRates' };
     const el = document.getElementById(map[id] || 'penMainManual');
     if (el) el.classList.remove('hidden');
     if (id === 'rates') renderRateReference();
+  }
+
+  function toggleRulesPopover(force) {
+    const pop = document.getElementById('rulesPopover');
+    if (!pop) return;
+    if (force === true) pop.classList.remove('hidden');
+    else if (force === false) pop.classList.add('hidden');
+    else pop.classList.toggle('hidden');
   }
 
   function showMode(mode) {
@@ -324,9 +522,9 @@ const PenUIManager = (() => {
       alert('No results to export.');
       return;
     }
-    const headers = ['ID', 'Date', 'Route', 'Supplier', 'Plan TT (hrs)', 'Actual TT (hrs)', 'DT (hrs)', 'Rate', 'Penalty', 'Rule', 'Rate Source'];
+    const headers = ['ID', 'Date', 'Route', 'Supplier', 'Status', 'Plan TT (hrs)', 'Actual TT (hrs)', 'DT (hrs)', 'Rate', 'Penalty', 'Rule', 'Rate Source'];
     const data = dataSrc.map((r, i) => [
-      r.id || (i + 1), r.date, r.route, r.supplier,
+      r.id || (i + 1), r.date, r.route, r.supplier, r.status || '',
       r.planTT != null ? +r.planTT.toFixed(4) : '',
       r.actualTT != null ? +r.actualTT.toFixed(4) : '',
       r.dt != null ? +r.dt.toFixed(4) : '',
@@ -358,6 +556,10 @@ const PenUIManager = (() => {
     exportResults,
     getLastResults,
     getMultiResults,
-    showResults
+    showResults,
+    setDfMode,
+    applyDateFilter,
+    clearDateFilter,
+    toggleRulesPopover
   };
 })();
