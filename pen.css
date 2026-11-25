@@ -804,3 +804,277 @@ td.empty { text-align: center; color: var(--muted); padding: 24px; }
 .status-disputed { color: #F9A825; font-weight: 600; }
 .status-broken { color: #6A1B9A; font-weight: 600; }
 .status-penalty { color: var(--jt-red); font-weight: 600; }
+/* ---- Hub side panel (3-line hamburger) ---- */
+.hub-menu-btn {
+  position: fixed;
+  top: 18px;
+  left: 16px;
+  z-index: 1200;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.95);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0;
+  transition: transform 0.15s, background 0.15s;
+}
+.hub-menu-btn:hover { transform: scale(1.06); background: #fff; }
+.hub-menu-btn span {
+  display: block;
+  width: 20px;
+  height: 2.5px;
+  background: var(--jt-red, #E60012);
+  border-radius: 2px;
+  transition: transform 0.2s, opacity 0.2s;
+}
+.hub-menu-btn.open span:nth-child(1) { transform: translateY(7.5px) rotate(45deg); }
+.hub-menu-btn.open span:nth-child(2) { opacity: 0; }
+.hub-menu-btn.open span:nth-child(3) { transform: translateY(-7.5px) rotate(-45deg); }
+
+.hub-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  z-index: 1140;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s;
+}
+.hub-backdrop.show { opacity: 1; pointer-events: auto; }
+
+.hub-side-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  width: min(300px, 86vw);
+  background: #fff;
+  z-index: 1150;
+  box-shadow: 8px 0 32px rgba(0,0,0,0.18);
+  transform: translateX(-105%);
+  transition: transform 0.28s ease;
+  display: flex;
+  flex-direction: column;
+}
+.hub-side-panel.open { transform: translateX(0); }
+.hub-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 16px 12px;
+  border-bottom: 1px solid var(--border, #eee);
+  color: var(--jt-red-dark, #B8000E);
+  font-size: 1.05rem;
+}
+.hub-panel-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: #f3f3f3;
+  font-size: 1.25rem;
+  cursor: pointer;
+  line-height: 1;
+  color: #666;
+}
+.hub-panel-close:hover { background: var(--jt-red-light, #ffe5e5); color: var(--jt-red); }
+.hub-panel-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.hub-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+  padding: 14px 16px;
+  border: 1px solid var(--border, #e8e8e8);
+  border-radius: 14px;
+  background: #fafafa;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+}
+.hub-nav-btn:hover {
+  background: var(--jt-red-light, #fff0f0);
+  border-color: var(--jt-red-soft, #ffb3b3);
+  transform: translateY(-1px);
+}
+.hub-nav-icon { font-size: 1.6rem; line-height: 1; }
+.hub-nav-text { display: flex; flex-direction: column; gap: 2px; }
+.hub-nav-title {
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--jt-red-dark, #B8000E);
+}
+.hub-nav-sub {
+  font-size: 0.78rem;
+  color: var(--muted, #888);
+}
+
+.hub-transition {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: transparent;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+.hub-transition.show {
+  opacity: 1;
+}
+.hub-tx-gif {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  object-fit: cover; /* Use 'fill' if you want it stretched to exact edges without cropping */
+  pointer-events: none;
+}
+.hub-tx-controls {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  z-index: 10000;
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.65);
+  padding: 10px 20px;
+  border-radius: 999px;
+  backdrop-filter: blur(4px);
+}
+.hub-tx-label {
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  display: inline-block;
+  margin-right: 12px;
+}
+.hub-tx-skip {
+  padding: 5px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+.hub-tx-skip:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* ===== Login gate ===== */
+#loginGate {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: linear-gradient(145deg, #B8000E 0%, #E60012 45%, #7f0a12 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+#loginGate.hidden { display: none; }
+
+.login-card {
+  position: relative;
+  overflow: visible;
+  background: #fff;
+  width: 100%;
+  max-width: 380px;
+  border-radius: 16px;
+  padding: 32px 28px 28px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.28);
+}
+.login-peek {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  user-select: none;
+}
+.login-peek-luffy {
+  left: -77px;
+  top: 42%;
+  transform: translateY(-50%) rotate(-24deg);
+  width: 110px;
+  height: auto;
+  filter: drop-shadow(2px 4px 8px rgba(0, 0, 0, 0.25));
+}
+@media (max-width: 520px) {
+  .login-peek-luffy { left: -28px; width: 78px; }
+}
+.login-card h2 {
+  text-align: center;
+  font-size: 1.25rem;
+  margin-bottom: 4px;
+  color: var(--text);
+}
+.login-card .login-sub {
+  text-align: center;
+  font-size: 0.88rem;
+  color: var(--muted);
+  margin-bottom: 22px;
+}
+.login-card label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.login-card input {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 0.95rem;
+  margin-bottom: 14px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.login-card input:focus {
+  border-color: var(--jt-red);
+  box-shadow: 0 0 0 3px rgba(230, 0, 18, 0.12);
+}
+.login-card button {
+  width: 100%;
+  padding: 12px;
+  background: var(--jt-red);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 4px;
+  transition: background 0.15s;
+}
+.login-card button:hover { background: var(--jt-red-dark); }
+
+.login-error {
+  display: none;
+  background: #FFEBEE;
+  color: #C62828;
+  font-size: 0.85rem;
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  text-align: center;
+}
+.login-error.show { display: block; }
+
+body.locked > :not(#loginGate) {
+  visibility: hidden;
+}
