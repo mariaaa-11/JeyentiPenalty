@@ -119,6 +119,76 @@
         PenUIManager.toggleRulesPopover(false);
       });
   
+      // Hub side panel + money.gif transition
+      (function setupHubNav() {
+        const menuBtn = document.getElementById('btnHubMenu');
+        const panel = document.getElementById('hubSidePanel');
+        const backdrop = document.getElementById('hubBackdrop');
+        const closeBtn = document.getElementById('btnHubClose');
+        const overlay = document.getElementById('hubTransition');
+        const gif = document.getElementById('hubTxGif');
+        const label = document.getElementById('hubTxLabel');
+        const skip = document.getElementById('hubTxSkip');
+        if (!menuBtn || !panel || !overlay) return;
+
+        const DURATION_MS = 4500;
+        let timer = null;
+        let going = false;
+        let pendingUrl = '';
+
+        function openPanel() {
+          panel.classList.add('open');
+          panel.setAttribute('aria-hidden', 'false');
+          backdrop?.classList.add('show');
+          menuBtn.classList.add('open');
+        }
+        function closePanel() {
+          panel.classList.remove('open');
+          panel.setAttribute('aria-hidden', 'true');
+          backdrop?.classList.remove('show');
+          menuBtn.classList.remove('open');
+        }
+        function goNow() {
+          if (going || !pendingUrl) return;
+          going = true;
+          if (timer) { clearTimeout(timer); timer = null; }
+          window.location.href = pendingUrl;
+        }
+        function playTransition(url, name) {
+          pendingUrl = url;
+          going = false;
+          if (timer) { clearTimeout(timer); timer = null; }
+          closePanel();
+          if (label) label.textContent = 'Going to ' + (name || 'hub') + '…';
+          if (gif) {
+            // restart gif
+            const base = 'money.gif';
+            gif.src = base + '?t=' + Date.now();
+          }
+          overlay.classList.add('show');
+          overlay.setAttribute('aria-hidden', 'false');
+          timer = setTimeout(goNow, DURATION_MS);
+        }
+
+        menuBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (panel.classList.contains('open')) closePanel();
+          else openPanel();
+        });
+        closeBtn?.addEventListener('click', closePanel);
+        backdrop?.addEventListener('click', closePanel);
+
+        document.querySelectorAll('.hub-nav-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const url = btn.getAttribute('data-hub-url');
+            const name = btn.getAttribute('data-hub-name') || 'hub';
+            if (!url) return;
+            playTransition(url, name);
+          });
+        });
+        skip?.addEventListener('click', goNow);
+      })();
+
       // datalists
       const dl = document.getElementById('supplierList');
       if (dl) {
