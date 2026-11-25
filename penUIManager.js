@@ -151,6 +151,13 @@ const PenUIManager = (() => {
       return route.includes(q) || sup.includes(q) || city.includes(q) || region.includes(q);
     });
 
+    const luz = (typeof PenRates.getAllLuzon === 'function' ? PenRates.getAllLuzon() : []).filter(v => {
+      const route = (v.route || '').toLowerCase();
+      const sup = (v.supplier || '').toLowerCase();
+      const city = (v.city || '').toLowerCase();
+      return route.includes(q) || sup.includes(q) || city.includes(q) || 'luzon'.includes(q);
+    });
+
     const loc = PenRates.getAllLocal().filter(l => {
       const branch = (l.branch || '').toLowerCase();
       const code = (l.branchCode || '').toLowerCase();
@@ -174,8 +181,20 @@ const PenUIManager = (() => {
       `).join('');
       if (vis.length > 40) html += `<div class="no-hits">… and ${vis.length - 40} more</div>`;
     }
+    if (luz.length) {
+      html += `<h4 style="margin-top:14px;">Local Luzon (${luz.length} match${luz.length > 1 ? 'es' : ''})</h4>`;
+      html += luz.slice(0, 40).map(v => `
+        <div class="rate-hit local-hit">
+          <span class="rh-route">${PenUtils.escapeHtml(v.route)}</span>
+          <span class="rh-sup">${PenUtils.escapeHtml(v.supplier)}</span>
+          <span class="rh-city">Luzon · ${PenUtils.escapeHtml(v.city || '')}</span>
+          <span class="rh-price">${PenUtils.formatMoney(v.rate)}</span>
+          <span class="rh-back">${PenUtils.escapeHtml(v.truckSize || '')}</span>
+        </div>
+      `).join('');
+    }
     if (loc.length) {
-      html += `<h4 style="margin-top:14px;">Local Trips (${loc.length} match${loc.length > 1 ? 'es' : ''})</h4>`;
+      html += `<h4 style="margin-top:14px;">Local Branch (${loc.length} match${loc.length > 1 ? 'es' : ''})</h4>`;
       html += loc.slice(0, 30).map(l => {
         let rateStr = '';
         if (typeof l.rate === 'object' && l.rate) {
@@ -192,7 +211,7 @@ const PenUIManager = (() => {
       }).join('');
       if (loc.length > 30) html += `<div class="no-hits">… and ${loc.length - 30} more</div>`;
     }
-    if (!vis.length && !loc.length) {
+    if (!vis.length && !luz.length && !loc.length) {
       html = `<div class="no-hits">No rates found for “${PenUtils.escapeHtml(query)}”</div>`;
     }
 
@@ -493,6 +512,20 @@ const PenUIManager = (() => {
         </tr>
       `).join('');
       visBody.dataset.loaded = '1';
+    }
+    const luzBody = document.querySelector('#luzonRateTable tbody');
+    if (luzBody && !luzBody.dataset.loaded && typeof PenRates.getAllLuzon === 'function') {
+      const rows = PenRates.getAllLuzon();
+      luzBody.innerHTML = rows.map(v => `
+        <tr>
+          <td>${PenUtils.escapeHtml(v.city || '')}</td>
+          <td><strong>${PenUtils.escapeHtml(v.route)}</strong></td>
+          <td>${PenUtils.escapeHtml(v.supplier)}</td>
+          <td>${PenUtils.escapeHtml(v.truckSize || '')}</td>
+          <td class="num">${PenUtils.formatMoney(v.rate)}</td>
+        </tr>
+      `).join('');
+      luzBody.dataset.loaded = '1';
     }
     const locBody = document.querySelector('#localRateTable tbody');
     if (locBody && !locBody.dataset.loaded) {
